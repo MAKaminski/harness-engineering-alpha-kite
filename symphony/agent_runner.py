@@ -105,7 +105,15 @@ def _extract_usage(msg: dict) -> dict[str, int]:
             else:
                 usage[key] = n
     merge(msg.get("usage"))
-    merge((msg.get("params") or {}).get("usage"))
+    params = msg.get("params") or {}
+    # Common shapes:
+    # - top-level: usage
+    # - params: { usage }
+    # - params: { turn: { usage } }
+    merge(params.get("usage"))
+    turn = params.get("turn") or {}
+    if isinstance(turn, dict):
+        merge(turn.get("usage"))
     return usage
 
 
