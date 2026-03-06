@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import subprocess
@@ -9,12 +10,12 @@ import threading
 import time
 from typing import Any, Callable
 
-
 from .config import ServiceConfig
 from .models import Issue
 from .prompt import render_prompt
 from .workspace_manager import run_after_run, run_before_run
 
+logger = logging.getLogger("symphony.agent_runner")
 
 # Max line size for protocol (spec recommends 10 MB)
 MAX_LINE_BYTES = 10 * 1024 * 1024
@@ -188,16 +189,20 @@ def run_agent_attempt(
             pass
 
     # 1. initialize
+    logger.info("codex handshake: waiting for initialize response (timeout_sec=%s)", read_timeout_sec)
     send({"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "symphony", "version": "1.0"}, "capabilities": {}}})
     init_resp = read_response(read_timeout_sec)
     if init_resp is None or "error" in init_resp:
+        logger.warning("codex handshake: initialize failed (timeout=%s)", init_resp is None)
         proc.terminate()
         run_after_run(config, workspace_path_abs)
         _emit(on_event, "startup_failed", {"error": "response_timeout" if init_resp is None else init_resp.get("error")})
         return False, "response_timeout" if init_resp is None else "response_error"
+    logger.info("codex handshake: initialize OK")
     # 2. initialized notification
     send({"method": "initialized", "params": {}})
     # 3. thread/start
+    logger.info("codex handshake: waiting for thread/start response (timeout_sec=%s)", read_timeout_sec)
     send({
         "id": 2,
         "method": "thread/start",
@@ -209,9 +214,11 @@ def run_agent_attempt(
     })
     thread_resp = read_response(read_timeout_sec)
     if thread_resp is None or "error" in thread_resp:
+        logger.warning("codex handshake: thread/start failed (timeout=%s)", thread_resp is None)
         proc.terminate()
         run_after_run(config, workspace_path_abs)
         return False, "response_timeout" if thread_resp is None else "response_error"
+    logger.info("codex handshake: thread/start OK")
     thread_id = _extract_thread_id(thread_resp)
     if not thread_id:
         proc.terminate()
@@ -232,6 +239,9 @@ def run_agent_attempt(
     title = f"{issue.identifier}: {issue.title}"[:200]
 
     while turn_number <= max_turns:
+        # First turn can be slow (model load, long prompt); use at least 5 min for turn/start response
+        turn_read_timeout = max(read_timeout_sec, 300) if turn_number == 1 else read_timeout_sec
+        logger.info("codex turn %s: waiting for turn/start response (timeout_sec=%s)", turn_number, turn_read_timeout)
         send({
             "id": 3 + turn_number,
             "method": "turn/start",
@@ -244,11 +254,13 @@ def run_agent_attempt(
                 "sandboxPolicy": {"type": sandbox_policy},
             },
         })
-        turn_resp = read_response(read_timeout_sec)
+        turn_resp = read_response(turn_read_timeout)
         if turn_resp is None or "error" in turn_resp:
+            logger.warning("codex turn %s: turn/start failed (timeout=%s)", turn_number, turn_resp is None)
             proc.terminate()
             run_after_run(config, workspace_path_abs)
             return False, "response_timeout" if turn_resp is None else "turn_failed"
+        logger.info("codex turn %s: turn/start OK", turn_number)
         turn_id = _extract_turn_id(turn_resp)
         if turn_id:
             session_id = f"{thread_id}-{turn_id}"
