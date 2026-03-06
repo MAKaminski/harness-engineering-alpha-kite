@@ -1,13 +1,13 @@
 ---
 tracker:
   kind: linear
-  url: https://linear.app/modularequity2   # Linear workspace (for links; API uses endpoint)
+  url: https://linear.app/modularequity2
   endpoint: https://api.linear.app/graphql
   api_key: $LINEAR_API_KEY
-  project_id: $LINEAR_PROJECT_ID   # optional: project UUID (preferred; avoids slugId 400)
-  project_slug: $LINEAR_PROJECT_SLUG   # or set project slugId from project URL
-  active_states: [Todo, "In Progress"]
-  terminal_states: [Closed, Cancelled, Canceled, Duplicate, Done]
+  project_id: $LINEAR_PROJECT_ID
+  project_slug: $LINEAR_PROJECT_SLUG
+  active_states: [Todo, "In Progress", "In Review"]
+  terminal_states: [Done, Cancelled, Canceled, Duplicate]
 
 polling:
   interval_ms: 30000
@@ -29,30 +29,34 @@ agent:
   max_retry_backoff_ms: 300000
 
 codex:
-  # Local in-repo Codex-compatible app-server (no external codex binary required)
-  # Use absolute path so it works from per-issue workspaces
   command: cd /Users/makaminski1337/Developer/harness-engineering-alpha-kite && PYTHONPATH=/Users/makaminski1337/Developer/harness-engineering-alpha-kite python3 -m symphony.local_codex_server
-  # approval_policy: never = auto-approve (Codex: untrusted | on-failure | on-request | reject | never)
-  # thread_sandbox: workspace-write (Codex thread/start: read-only | workspace-write | danger-full-access)
-  # turn_sandbox_policy: workspaceWrite (Codex turn sandboxPolicy.type: camelCase workspaceWrite | readOnly | dangerFullAccess | externalSandbox)
   turn_timeout_ms: 3600000
-  read_timeout_ms: 120000   # 2 min for init/thread/turn handshakes (was 5s; avoids response_timeout)
-  stall_timeout_ms: 600000   # 10 min before orchestrator marks session stalled
+  read_timeout_ms: 120000
+  stall_timeout_ms: 600000
 ---
 
-You are working on a Linear issue assigned to this session.
+You are working on a Linear issue assigned to this Symphony session.
 
 **Issue:** {{ issue.identifier }} – {{ issue.title }}
 **Issue ID (Linear):** {{ issue.id }}
+**State:** {{ issue.state }}
+**Labels:** {{ issue.labels | join(", ") }}
 
 **Description:**
 {{ issue.description }}
 
-**State:** {{ issue.state }}
-**Labels:** {{ issue.labels | join(", ") }}
-
 {% if attempt %}
-This is attempt {{ attempt }} (retry or continuation).
+Retry attempt: {{ attempt }}
 {% endif %}
 
-Complete the work for this issue: implement the requested changes, run tests, and update the ticket or open a PR as appropriate. If you need to change issue state or add comments, use the available tracker tools.
+Execution rules:
+
+1. Implement only what this issue asks for. Do not pull in unrelated backlog work.
+2. Use Linear MCP to add a delivery comment that includes:
+   - Scope completed
+   - Verification commands + results
+   - Artifacts (URLs/files)
+   - Blockers (if any)
+3. If issue scope is complete and verified, move it to `Done`.
+4. If external credentials/access block final validation, move it to `In Review` and list exact blockers.
+5. Never mark an issue `Done` when blockers remain unresolved.
