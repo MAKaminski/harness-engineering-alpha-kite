@@ -17,6 +17,11 @@ workspace:
 
 hooks:
   timeout_ms: 60000
+  after_create: |
+    # Populate workspace with repo so Codex can edit real code.
+    if [ ! -d .git ]; then
+      git clone --depth 1 https://github.com/MAKaminski/harness-engineering-alpha-kite.git .
+    fi
 
 agent:
   max_concurrent_agents: 2
