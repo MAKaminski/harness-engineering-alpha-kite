@@ -293,9 +293,10 @@ class Orchestrator:
             entry.last_codex_timestamp = event.get("timestamp")
             entry.last_codex_message = str(event.get("last_message", ""))[:500]
             usage = event.get("usage") or {}
-            entry.codex_input_tokens = usage.get("input_tokens") or entry.codex_input_tokens
-            entry.codex_output_tokens = usage.get("output_tokens") or entry.codex_output_tokens
-            entry.codex_total_tokens = usage.get("total_tokens") or entry.codex_total_tokens
+            # Accumulate token counts from turn_completed and notifications
+            entry.codex_input_tokens += usage.get("input_tokens", 0) or 0
+            entry.codex_output_tokens += usage.get("output_tokens", 0) or 0
+            entry.codex_total_tokens += usage.get("total_tokens", 0) or 0
             if "turn_count" in event:
                 entry.turn_count = event.get("turn_count", entry.turn_count)
 
