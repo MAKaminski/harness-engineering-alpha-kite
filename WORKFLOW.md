@@ -26,6 +26,8 @@ agent:
 codex:
   # Use full path if codex is not on PATH for bash -lc (e.g. /usr/local/bin/codex app-server or npx codex app-server)
   command: codex app-server
+  # approval_policy: never = auto-approve (Codex: untrusted | on-failure | on-request | reject | never)
+  # thread_sandbox / turn_sandbox_policy: workspace-write = allow edits (Codex: read-only | workspace-write | danger-full-access)
   turn_timeout_ms: 3600000
   read_timeout_ms: 120000   # 2 min for init/thread/turn handshakes (was 5s; avoids response_timeout)
   stall_timeout_ms: 600000   # 10 min before orchestrator marks session stalled
