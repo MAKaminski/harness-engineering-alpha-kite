@@ -23,6 +23,7 @@ agent:
   max_retry_backoff_ms: 300000
 
 codex:
+  # Use full path if codex is not on PATH for bash -lc (e.g. /usr/local/bin/codex app-server or npx codex app-server)
   command: codex app-server
   turn_timeout_ms: 3600000
   read_timeout_ms: 120000   # 2 min for init/thread/turn handshakes (was 5s; avoids response_timeout)
