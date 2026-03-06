@@ -212,13 +212,13 @@ class ServiceConfig:
 
     @property
     def codex_thread_sandbox(self) -> str:
-        # Codex expects: read-only | workspace-write | danger-full-access (not "relaxed")
+        # Codex thread/start sandbox: read-only | workspace-write | danger-full-access (kebab-case)
         return (self._codex().get("thread_sandbox") or "workspace-write").strip()
 
     @property
     def codex_turn_sandbox_policy(self) -> str:
-        # Codex turn sandbox policy type (use same variants as thread_sandbox if supported)
-        return (self._codex().get("turn_sandbox_policy") or "workspace-write").strip()
+        # Codex turn sandboxPolicy.type expects: dangerFullAccess | readOnly | externalSandbox | workspaceWrite (camelCase)
+        return (self._codex().get("turn_sandbox_policy") or "workspaceWrite").strip()
 
     @property
     def codex_turn_timeout_ms(self) -> int:

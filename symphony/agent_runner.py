@@ -6,6 +6,7 @@ import logging
 import os
 import queue
 import subprocess
+import sys
 import threading
 import time
 from typing import Any, Callable
@@ -19,6 +20,13 @@ logger = logging.getLogger("symphony.agent_runner")
 
 # Max line size for protocol (spec recommends 10 MB)
 MAX_LINE_BYTES = 10 * 1024 * 1024
+
+# Use PTY for stdout when available so the child line-buffers (avoids block buffering over pipe)
+_use_pty = sys.platform != "win32"
+try:
+    import pty
+except ImportError:
+    _use_pty = False
 
 
 def _now_utc() -> str:
@@ -114,44 +122,87 @@ def run_agent_attempt(
     sandbox = config.codex_thread_sandbox
     sandbox_policy = config.codex_turn_sandbox_policy
 
+    pty_master: int | None = None
+    stdout_file: Any = None
     try:
-        proc = subprocess.Popen(
-            ["bash", "-lc", config.codex_command],
-            cwd=workspace_path_abs,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        )
+        if _use_pty:
+            pty_master, slave = pty.openpty()
+            try:
+                proc = subprocess.Popen(
+                    ["bash", "-lc", config.codex_command],
+                    cwd=workspace_path_abs,
+                    stdin=subprocess.PIPE,
+                    stdout=slave,
+                    stderr=subprocess.PIPE,
+                    text=False,
+                )
+            finally:
+                os.close(slave)
+        else:
+            proc = subprocess.Popen(
+                ["bash", "-lc", config.codex_command],
+                cwd=workspace_path_abs,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            stdout_file = proc.stdout
     except FileNotFoundError:
+        if pty_master is not None:
+            try:
+                os.close(pty_master)
+            except OSError:
+                pass
         run_after_run(config, workspace_path_abs)
         _emit(on_event, "startup_failed", {"error": "codex_not_found"})
         return False, "codex_not_found"
     except Exception as e:
+        if pty_master is not None:
+            try:
+                os.close(pty_master)
+            except OSError:
+                pass
         run_after_run(config, workspace_path_abs)
         _emit(on_event, "startup_failed", {"error": str(e)})
         return False, "response_error"
 
     pid_str = str(proc.pid) if proc.pid else None
-    stdout = proc.stdout
-    stderr = proc.stderr
     stdin = proc.stdin
-    if not stdout or not stdin:
+    stderr = proc.stderr
+    if not stdin:
         proc.kill()
+        if pty_master is not None:
+            try:
+                os.close(pty_master)
+            except OSError:
+                pass
         run_after_run(config, workspace_path_abs)
         return False, "response_error"
 
     # Incoming message queue (reader thread puts parsed lines here)
     msg_queue: queue.Queue[dict | None] = queue.Queue()
 
+    def read_stdout_chunk() -> str:
+        if pty_master is not None:
+            try:
+                data = os.read(pty_master, 4096)
+                return data.decode("utf-8", errors="replace")
+            except OSError:
+                return ""
+        if stdout_file:
+            return stdout_file.read(4096)
+        return ""
+
     def reader() -> None:
         line_buf = ""
         try:
             while proc.poll() is None:
-                chunk = stdout.read(4096)
+                chunk = read_stdout_chunk()
                 if not chunk:
-                    break
+                    time.sleep(0.05)
+                    continue
                 line_buf += chunk
                 while "\n" in line_buf:
                     line, line_buf = line_buf.split("\n", 1)
@@ -160,8 +211,26 @@ def run_agent_attempt(
                     obj = _read_json_from_line(line)
                     if obj is not None:
                         msg_queue.put(obj)
+            # Drain remaining data (e.g. after process exits)
+            while True:
+                chunk = read_stdout_chunk()
+                if not chunk:
+                    break
+                line_buf += chunk
+                while "\n" in line_buf:
+                    line, line_buf = line_buf.split("\n", 1)
+                    if len(line) <= MAX_LINE_BYTES:
+                        obj = _read_json_from_line(line)
+                        if obj is not None:
+                            msg_queue.put(obj)
         except Exception:
             pass
+        finally:
+            if pty_master is not None:
+                try:
+                    os.close(pty_master)
+                except OSError:
+                    pass
         msg_queue.put(None)  # EOF sentinel
 
     read_thread = threading.Thread(target=reader, daemon=True)
@@ -183,7 +252,8 @@ def run_agent_attempt(
 
     def send(msg: dict) -> None:
         try:
-            stdin.write(json.dumps(msg) + "\n")
+            payload = (json.dumps(msg) + "\n").encode("utf-8") if pty_master is not None else (json.dumps(msg) + "\n")
+            stdin.write(payload)
             stdin.flush()
         except (BrokenPipeError, OSError):
             pass
@@ -256,7 +326,10 @@ def run_agent_attempt(
         })
         turn_resp = read_response(turn_read_timeout)
         if turn_resp is None or "error" in turn_resp:
-            logger.warning("codex turn %s: turn/start failed (timeout=%s)", turn_number, turn_resp is None)
+            if turn_resp and "error" in turn_resp:
+                logger.warning("codex turn %s: turn/start error: %s", turn_number, turn_resp.get("error"))
+            else:
+                logger.warning("codex turn %s: turn/start failed (timeout=%s)", turn_number, turn_resp is None)
             proc.terminate()
             run_after_run(config, workspace_path_abs)
             return False, "response_timeout" if turn_resp is None else "turn_failed"
