@@ -25,8 +25,8 @@ agent:
 codex:
   command: codex app-server
   turn_timeout_ms: 3600000
-  read_timeout_ms: 5000
-  stall_timeout_ms: 300000
+  read_timeout_ms: 120000   # 2 min for init/thread/turn handshakes (was 5s; avoids response_timeout)
+  stall_timeout_ms: 600000   # 10 min before orchestrator marks session stalled
 ---
 
 You are working on a Linear issue assigned to this session.
