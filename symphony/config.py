@@ -106,7 +106,9 @@ class ServiceConfig:
 
     @property
     def tracker_project_slug(self) -> str:
-        return (self._tracker().get("project_slug") or "").strip()
+        raw = self._tracker().get("project_slug") or ""
+        expanded = _expand_value(raw) if isinstance(raw, str) else raw
+        return (expanded or "").strip() if isinstance(expanded, str) else ""
 
     @property
     def tracker_active_states(self) -> list[str]:

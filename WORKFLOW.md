@@ -3,7 +3,7 @@ tracker:
   kind: linear
   endpoint: https://api.linear.app/graphql
   api_key: $LINEAR_API_KEY
-  project_slug: ""   # set to your Linear project slugId
+  project_slug: $LINEAR_PROJECT_SLUG   # or set your Linear project slugId (from project URL)
   active_states: [Todo, "In Progress"]
   terminal_states: [Closed, Cancelled, Canceled, Duplicate, Done]
 
