@@ -1,6 +1,7 @@
 ---
 tracker:
   kind: linear
+  url: https://linear.app/modularequity2   # Linear workspace (for links; API uses endpoint)
   endpoint: https://api.linear.app/graphql
   api_key: $LINEAR_API_KEY
   project_id: $LINEAR_PROJECT_ID   # optional: project UUID (preferred; avoids slugId 400)

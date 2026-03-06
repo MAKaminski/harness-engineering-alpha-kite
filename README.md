@@ -20,6 +20,12 @@ source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
+**Codex CLI:** Symphony runs `codex app-server` per issue. Install the Codex app-server CLI and ensure it is on your PATH (or set `codex.command` in `WORKFLOW.md` to the full path, e.g. `/usr/local/bin/codex app-server`). Verify with:
+```bash
+bash -lc "codex app-server"
+```
+(No "command not found" and the process should stay running.)
+
 Set your Linear API key and project:
 
 ```bash
