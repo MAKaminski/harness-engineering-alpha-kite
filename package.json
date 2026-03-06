@@ -1,0 +1,13 @@
+{
+  "name": "alpha-kite-trading-stack",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "smoke:web": "node apps/web/scripts/smoke.js",
+    "test:api": "python3 -m pytest -q tests/api",
+    "test": "npm run smoke:web && npm run test:api"
+  }
+}

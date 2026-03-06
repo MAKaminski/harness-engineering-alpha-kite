@@ -26,6 +26,11 @@ venv/
 ENV/
 env/
 
+# Node
+node_modules/
+apps/web/node_modules/
+apps/web/.next/
+
 # IDE / editor
 .idea/
 .vscode/
@@ -40,6 +45,11 @@ Thumbs.db
 # Symphony runtime
 symphony_workspaces/
 *.log
+
+# Local outputs
+apps/api/data/camelot_ingested.json
+apps/api/data/camelot_test_output.json
+.pytest_cache/
 
 # Secrets and local config (do not commit)
 .env

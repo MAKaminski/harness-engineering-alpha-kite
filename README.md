@@ -1,86 +1,86 @@
-# Symphony (Python)
+# Alpha-Kite Symphony + Trading Stack
 
-A long-running service that orchestrates coding agents from an issue tracker (Linear). It reads work from Linear, creates per-issue workspaces, and runs a Codex app-server agent for each issue. Implements the [Symphony Service Specification](SPEC.md).
+This repository now contains two connected systems:
 
-## Features
+- `symphony/`: long-running Linear orchestration service for issue-driven agent execution.
+- `apps/api` + `apps/web`: trading backend/frontend implementation tracked by Alpha-Kite Linear issues.
 
-- **Workflow loader**: `WORKFLOW.md` with YAML front matter and Jinja2 prompt template
-- **Config layer**: Typed getters, `$VAR` env resolution, path expansion
-- **Linear client**: GraphQL client for candidate issues, state refresh, terminal cleanup
-- **Workspace manager**: Per-issue directories, sanitized keys, hooks (`after_create`, `before_run`, `after_run`, `before_remove`)
-- **Agent runner**: Codex app-server protocol over stdio (initialize, thread/start, turn/start, streaming)
-- **Orchestrator**: Poll loop, dispatch, reconciliation, retry with exponential backoff, stall detection
-- **Optional HTTP server**: Dashboard at `/`, JSON API at `/api/v1/state` and `/api/v1/refresh`
+## Layout
 
-## Setup
+- `symphony/`: core Symphony service implementation
+- `apps/api`: FastAPI backend (Supabase, Polygon, Schwab, Camelot providers)
+- `apps/web`: Next.js frontend routed to backend APIs
+- `docs/run-checklist.md`: preflight checklist for secrets and execution
+- `docs/symphony-issue-protocol.md`: required issue transition/comment protocol
+- `apps/api/sql/supabase_schema.sql`: base schema + RLS policy scaffold
+
+## Prerequisites
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+npm --prefix apps/web install
 ```
 
-**Codex CLI:** Symphony runs `codex app-server` per issue. Install the Codex app-server CLI and ensure it is on your PATH (or set `codex.command` in `WORKFLOW.md` to the full path, e.g. `/usr/local/bin/codex app-server`). Verify with:
-```bash
-bash -lc "codex app-server"
-```
-(No "command not found" and the process should stay running.)
+## Environment
 
-Set your Linear API key and project:
+Copy `.env.example` to `.env` and set required values.
 
-```bash
-export LINEAR_API_KEY=lin_api_...
-export LINEAR_PROJECT_SLUG=your-project-slug   # from project URL, e.g. alpha-kite-f0ebf2d85f93
-```
+Core values:
 
-Or set `tracker.project_slug` in `WORKFLOW.md`; `$LINEAR_PROJECT_SLUG` is expanded from the environment.
+- `LINEAR_API_KEY`
+- `LINEAR_PROJECT_ID=d77c9342-536d-41f4-9526-2fd38e65226c` (preferred)
+- `PROVIDER_MODE=auto|mock|real`
+- Provider credentials (`SUPABASE_*`, `POLYGON_*`, `SCHWAB_*`, `CAMELOT_*`)
 
-## Run
+## Run Symphony
 
 ```bash
-# Recommended: use the run script (checks env, starts with dashboard on :8080)
 ./scripts/run-symphony.sh
-
-# Or manually (use python3 if python is not available):
-python3 -m symphony.cli -v --port 8080
-
-# Default: use ./WORKFLOW.md
-python3 -m symphony.cli
-
-# Explicit workflow path
-python3 -m symphony.cli /path/to/WORKFLOW.md
+# dashboard/API on http://localhost:8080 when using --port 8080
 ```
 
-The service will:
+## Run Backend
 
-1. Validate workflow and config
-2. Clean up workspaces for issues already in terminal states
-3. Poll Linear on the configured interval for issues in active states
-4. Dispatch agents (respecting concurrency and blocker rules)
-5. Reconcile running issues each tick (stop if issue moved to terminal/non-active)
-6. Schedule retries on failure with exponential backoff
+```bash
+python3 apps/api/main.py
+```
 
-## Workflow file
+API surface:
 
-See `WORKFLOW.md` in this repo for an example. Required:
+- `GET /health`
+- `GET /market/quote`, `GET /market/bars`, `GET /market/indicators`
+- `GET/POST/DELETE /watchlists/{user_id}`
+- `POST /auth/session`, `GET /auth/session/{token}`
+- `GET /positions/{user_id}`, `GET /orders/{user_id}`, `POST /orders/{user_id}`
+- `POST /ingest/camelot`
 
-- `tracker.kind`: `linear`
-- `tracker.api_key`: token or `$LINEAR_API_KEY`
-- `tracker.project_slug`: Linear project slug
-- `codex.command`: e.g. `codex app-server`
+## Run Frontend
 
-Prompt body supports `{{ issue.* }}` and `{% if attempt %}...{% endif %}` (Jinja2).
+```bash
+npm --prefix apps/web run dev
+```
 
-## Trust and safety
+Set `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`).
 
-This implementation is intended for **trusted environments**. It uses a high-trust posture:
+## Verification
 
-- **Approvals**: Auto-approve command and file-change approvals
-- **User input**: Treat user-input-required as hard failure (no indefinite stall)
-- **Sandbox**: Uses Codex sandbox settings from workflow (`thread_sandbox`, `turn_sandbox_policy`)
+```bash
+python3 -m pytest -q tests/api
+node apps/web/scripts/smoke.js
+```
 
-Do not expose the dashboard or API on an untrusted network without additional hardening.
+## Deployment Notes
 
-## License
+- Frontend target: Vercel (`apps/web`)
+- Backend target: Railway (`apps/api`)
+- Do not commit provider secrets; use platform env settings.
 
-As per project.
+## Add New Linear Tasks For Symphony
+
+1. Create a new issue in Linear under project `Alpha-Kite`.
+2. Set state to `Todo`, include clear scope and acceptance criteria, and add dependency links (`blocked by` / `blocks`) when needed.
+3. Ensure the issue belongs to team `Alpha-Kite` so it matches `WORKFLOW.md` filters.
+4. Run Symphony (`./scripts/run-symphony.sh`) to pick up eligible `Todo`/`In Progress`/`In Review` tasks.
+5. During execution, require issue comments with scope, verification, and blockers before moving to `Done`.
