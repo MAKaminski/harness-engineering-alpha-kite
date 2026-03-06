@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import uuid
 from typing import Any, Dict
@@ -25,6 +26,15 @@ try:
 except Exception:
     _openai_client = None
 
+try:
+    # Optional Linear client helper (available when running as a package module)
+    from symphony.linear_client import LINEAR_GRAPHQL_ENDPOINT, transition_issue_to_state
+except Exception:
+    LINEAR_GRAPHQL_ENDPOINT = "https://api.linear.app/graphql"
+
+    def transition_issue_to_state(endpoint: str, api_key: str, issue_id: str, state_name: str) -> None:  # type: ignore[no-redef]
+        raise RuntimeError("transition_issue_to_state is not available")
+
 
 def _write(msg: Dict[str, Any]) -> None:
     sys.stdout.write(json.dumps(msg) + "\n")
@@ -34,6 +44,33 @@ def _write(msg: Dict[str, Any]) -> None:
 def _estimate_tokens(text: str) -> int:
     # Very rough heuristic: ~4 chars per token
     return max(1, len(text) // 4) if text else 1
+
+
+def _extract_issue_id_from_prompt(text: str) -> str | None:
+    """Parse Linear issue ID from the rendered prompt body.
+
+    Expected pattern (from WORKFLOW.md prompt template):
+    **Issue ID (Linear):** <ISSUE_ID>
+    """
+    if not text:
+        return None
+    m = re.search(r"Issue ID \(Linear\):\s*([A-Za-z0-9_-]+)", text)
+    if not m:
+        return None
+    return m.group(1)
+
+
+def _extract_issue_identifier_from_prompt(text: str) -> str | None:
+    """Best-effort parse of issue identifier from the prompt first line."""
+    if not text:
+        return None
+    # Matches lines like: "**Issue:** AK-123 – Some title"
+    for line in text.splitlines():
+        if "Issue" in line:
+            m = re.search(r"\b([A-Z]+-\d+)\b", line)
+            if m:
+                return m.group(1)
+    return None
 
 
 def main() -> None:
@@ -80,7 +117,7 @@ def main() -> None:
             )
             continue
 
-        # 4. turn/start – echo a dummy response and emit turn/completed
+        # 4. turn/start – perform a minimal workspace action, optionally update Linear, then emit turn/completed
         if method == "turn/start" and msg_id is not None:
             turn_counter += 1
             turn_id = f"turn-{turn_counter}"
@@ -92,6 +129,32 @@ def main() -> None:
                 first = input_items[0] or {}
                 if isinstance(first, dict):
                     text_input = str(first.get("text") or "")
+
+            # Workspace: resolve cwd and write a small progress marker file.
+            cwd = params.get("cwd") or os.getcwd()
+            issue_id = _extract_issue_id_from_prompt(text_input)
+            issue_identifier = _extract_issue_identifier_from_prompt(text_input)
+            try:
+                progress_path = os.path.join(cwd, "SYMPHONY_PROGRESS.txt")
+                with open(progress_path, "a", encoding="utf-8") as f:
+                    label = issue_identifier or issue_id or "unknown-issue"
+                    f.write(f"{label} turn={turn_id}\n")
+            except Exception:
+                # Workspace writes are best-effort; never break the protocol on failure.
+                pass
+
+            # Optional: attempt to transition the Linear issue to a terminal state (e.g. Done).
+            task_done = False
+            linear_api_key = os.environ.get("LINEAR_API_KEY", "").strip()
+            linear_endpoint = os.environ.get("LINEAR_GRAPHQL_ENDPOINT", LINEAR_GRAPHQL_ENDPOINT).strip() or LINEAR_GRAPHQL_ENDPOINT
+            terminal_state_name = os.environ.get("LINEAR_TERMINAL_STATE_NAME", "Done")
+            if issue_id and linear_api_key:
+                try:
+                    transition_issue_to_state(linear_endpoint, linear_api_key, issue_id, terminal_state_name)
+                    task_done = True
+                except Exception:
+                    # Linear failures should not crash the app-server; fallback to normal behavior.
+                    task_done = False
 
             # Default to heuristic usage; replace with real LLM usage if available
             input_tokens = _estimate_tokens(text_input)
@@ -150,6 +213,10 @@ def main() -> None:
                                 "outputTokens": output_tokens,
                                 "totalTokens": total_tokens,
                             },
+                            # Optional extension consumed by the agent_runner: when true, the
+                            # runner exits the turn loop after this turn and marks the attempt
+                            # as a success instead of continuing up to max_turns.
+                            "taskDone": task_done,
                         },
                     },
                 }

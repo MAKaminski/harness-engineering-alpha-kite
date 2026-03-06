@@ -347,3 +347,84 @@ def fetch_issue_states_by_ids(config: ServiceConfig, issue_ids: list[str]) -> li
         else:
             n["state"] = {"name": n.get("state", "Unknown")}
     return [_normalize_issue(n) for n in nodes]
+
+
+# --- Issue state transition helper (used by local Codex server) ---
+ISSUE_TEAM_QUERY = """
+query IssueTeam($id: ID!) {
+  issue(id: $id) {
+    id
+    team { id }
+  }
+}
+"""
+
+WORKFLOW_STATES_BY_TEAM_QUERY = """
+query WorkflowStatesByTeam($teamId: ID!) {
+  workflowStates(filter: { team: { id: { eq: $teamId } } }) {
+    nodes {
+      id
+      name
+    }
+  }
+}
+"""
+
+ISSUE_UPDATE_STATE_MUTATION = """
+mutation IssueSetState($id: ID!, $stateId: String!) {
+  issueUpdate(id: $id, input: { stateId: $stateId }) {
+    success
+    issue {
+      id
+      state { name }
+    }
+  }
+}
+"""
+
+
+def transition_issue_to_state(endpoint: str, api_key: str, issue_id: str, state_name: str) -> None:
+    """Transition a Linear issue to the given workflow state name.
+
+    This helper is intentionally low-level so it can be called from the local Codex server
+    using only env configuration (endpoint + api key + issue id + target state name).
+    """
+    if not issue_id:
+        raise LinearClientError("missing_issue_id", "Issue ID not provided")
+    if not api_key:
+        raise LinearClientError("missing_tracker_api_key", "Linear API key not set")
+
+    endpoint_norm = (endpoint or LINEAR_GRAPHQL_ENDPOINT).strip() or LINEAR_GRAPHQL_ENDPOINT
+    # 1) Fetch issue to get its team
+    issue_data = _gql(endpoint_norm, api_key, ISSUE_TEAM_QUERY, {"id": issue_id})
+    issue_node = (issue_data.get("data") or {}).get("issue") or {}
+    team = issue_node.get("team") or {}
+    team_id = team.get("id")
+    if not team_id:
+        raise LinearClientError("missing_team", "Issue does not have an associated team")
+
+    # 2) Fetch workflow states for that team and find the target by name (case-insensitive)
+    states_data = _gql(endpoint_norm, api_key, WORKFLOW_STATES_BY_TEAM_QUERY, {"teamId": team_id})
+    ws = (states_data.get("data") or {}).get("workflowStates") or {}
+    nodes = list(ws.get("nodes") or [])
+    target_state_name = (state_name or "").strip().lower()
+    target = next(
+        (s for s in nodes if isinstance(s, dict) and (s.get("name") or "").strip().lower() == target_state_name),
+        None,
+    )
+    if not target:
+        raise LinearClientError("state_not_found", f"Workflow state '{state_name}' not found for team {team_id}")
+    state_id = target.get("id")
+    if not state_id:
+        raise LinearClientError("state_id_missing", "Workflow state ID missing for target state")
+
+    # 3) Issue update mutation
+    update_data = _gql(
+        endpoint_norm,
+        api_key,
+        ISSUE_UPDATE_STATE_MUTATION,
+        {"id": issue_id, "stateId": state_id},
+    )
+    payload = (update_data.get("data") or {}).get("issueUpdate") or {}
+    if not payload.get("success", False):
+        raise LinearClientError("issue_update_failed", "Issue state update reported success=false", details=payload)

@@ -31,7 +31,7 @@ agent:
 codex:
   # Local in-repo Codex-compatible app-server (no external codex binary required)
   # Use absolute path so it works from per-issue workspaces
-  command: python3 /Users/makaminski1337/Developer/harness-engineering-alpha-kite/symphony/local_codex_server.py
+  command: python3 -m symphony.local_codex_server
   # approval_policy: never = auto-approve (Codex: untrusted | on-failure | on-request | reject | never)
   # thread_sandbox: workspace-write (Codex thread/start: read-only | workspace-write | danger-full-access)
   # turn_sandbox_policy: workspaceWrite (Codex turn sandboxPolicy.type: camelCase workspaceWrite | readOnly | dangerFullAccess | externalSandbox)
@@ -43,6 +43,7 @@ codex:
 You are working on a Linear issue assigned to this session.
 
 **Issue:** {{ issue.identifier }} – {{ issue.title }}
+**Issue ID (Linear):** {{ issue.id }}
 
 **Description:**
 {{ issue.description }}

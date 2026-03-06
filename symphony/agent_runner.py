@@ -365,6 +365,7 @@ def run_agent_attempt(
         # Stream until turn/completed, turn/failed, turn/cancelled or timeout (consume from queue)
         turn_done = False
         turn_success = False
+        task_done = False
         deadline = time.monotonic() + turn_timeout_sec
         while time.monotonic() < deadline and not turn_done:
             if proc.poll() is not None:
@@ -394,6 +395,15 @@ def run_agent_attempt(
                         list(params_dbg.keys()),
                         json.dumps(params_dbg.get("turn", {}))[:2000],
                     )
+                # Optional extension: task completion flag from app-server
+                params_all = obj.get("params") or {}
+                turn_payload = params_all.get("turn") or {}
+                if isinstance(turn_payload, dict):
+                    done_flag = turn_payload.get("taskDone")
+                    if done_flag is None:
+                        done_flag = turn_payload.get("taskComplete")
+                    if done_flag:
+                        task_done = True
                 _emit(on_event, "turn_completed", {"usage": usage, "turn_count": turn_number})
             elif method in ("turn/failed", "turn/cancelled"):
                 turn_done = True
@@ -427,6 +437,8 @@ def run_agent_attempt(
         if not turn_success:
             run_after_run(config, workspace_path_abs)
             return False, "turn_failed"
+        if task_done:
+            break
         turn_number += 1
         if turn_number <= max_turns:
             current_prompt = "Continue with the next step for this issue."  # continuation guidance
