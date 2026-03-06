@@ -77,8 +77,26 @@ def _extract_turn_id(result: dict) -> str | None:
 
 
 def _extract_usage(msg: dict) -> dict[str, int]:
-    """Extract input/output/total token counts from various payload shapes."""
+    """Extract input/output/total token counts from various payload shapes (top-level or params)."""
     usage: dict[str, int] = {}
+
+    def merge(u: dict) -> None:
+        if not isinstance(u, dict):
+            return
+        for k, v in u.items():
+            if isinstance(v, (int, float)):
+                usage[k] = int(v)
+        # Normalize camelCase from Codex
+        for key in ("inputTokens", "outputTokens", "totalTokens"):
+            if key in u and isinstance(u[key], (int, float)):
+                n = int(u[key])
+                if "input" in key.lower():
+                    usage["input_tokens"] = n
+                elif "output" in key.lower():
+                    usage["output_tokens"] = n
+                else:
+                    usage["total_tokens"] = n
+
     for key in ("input_tokens", "output_tokens", "total_tokens", "inputTokens", "outputTokens", "totalTokens"):
         if key in msg and isinstance(msg[key], (int, float)):
             n = int(msg[key])
@@ -86,11 +104,8 @@ def _extract_usage(msg: dict) -> dict[str, int]:
                 usage["input_tokens" if "input" in key.lower() else "output_tokens" if "output" in key.lower() else "total_tokens"] = n
             else:
                 usage[key] = n
-    u = msg.get("usage")
-    if isinstance(u, dict):
-        for k, v in u.items():
-            if isinstance(v, (int, float)):
-                usage[k] = int(v)
+    merge(msg.get("usage"))
+    merge((msg.get("params") or {}).get("usage"))
     return usage
 
 
@@ -337,7 +352,7 @@ def run_agent_attempt(
         turn_id = _extract_turn_id(turn_resp)
         if turn_id:
             session_id = f"{thread_id}-{turn_id}"
-            _emit(on_event, "session_started", {"session_id": session_id, "turn_id": turn_id})
+            _emit(on_event, "session_started", {"session_id": session_id, "turn_id": turn_id, "turn_count": turn_number})
 
         # Stream until turn/completed, turn/failed, turn/cancelled or timeout (consume from queue)
         turn_done = False
@@ -357,7 +372,7 @@ def run_agent_attempt(
             if method == "turn/completed":
                 turn_done = True
                 turn_success = True
-                _emit(on_event, "turn_completed", {"usage": _extract_usage(obj)})
+                _emit(on_event, "turn_completed", {"usage": _extract_usage(obj), "turn_count": turn_number})
             elif method in ("turn/failed", "turn/cancelled"):
                 turn_done = True
                 _emit(on_event, "turn_failed" if method == "turn/failed" else "turn_cancelled", {"payload": obj})
@@ -381,7 +396,7 @@ def run_agent_attempt(
                         _emit(on_event, "unsupported_tool_call", {"name": tool_name})
             usage = _extract_usage(obj)
             if usage:
-                _emit(on_event, "notification", {"usage": usage})
+                _emit(on_event, "notification", {"usage": usage, "turn_count": turn_number})
 
         if not turn_done:
             proc.terminate()
