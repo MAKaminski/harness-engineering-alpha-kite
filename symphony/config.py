@@ -106,7 +106,16 @@ class ServiceConfig:
 
     @property
     def tracker_project_slug(self) -> str:
-        return (self._tracker().get("project_slug") or "").strip()
+        raw = self._tracker().get("project_slug") or ""
+        expanded = _expand_value(raw) if isinstance(raw, str) else raw
+        return (expanded or "").strip() if isinstance(expanded, str) else ""
+
+    @property
+    def tracker_project_id(self) -> str:
+        """Optional Linear project UUID; when set, used instead of project_slug for API filters."""
+        raw = self._tracker().get("project_id") or ""
+        expanded = _expand_value(raw) if isinstance(raw, str) else raw
+        return (expanded or "").strip() if isinstance(expanded, str) else ""
 
     @property
     def tracker_active_states(self) -> list[str]:
@@ -198,15 +207,18 @@ class ServiceConfig:
 
     @property
     def codex_approval_policy(self) -> str:
-        return (self._codex().get("approval_policy") or "auto").strip()
+        # Codex expects: untrusted | on-failure | on-request | reject | never (not "auto")
+        return (self._codex().get("approval_policy") or "never").strip()
 
     @property
     def codex_thread_sandbox(self) -> str:
-        return (self._codex().get("thread_sandbox") or "relaxed").strip()
+        # Codex expects: read-only | workspace-write | danger-full-access (not "relaxed")
+        return (self._codex().get("thread_sandbox") or "workspace-write").strip()
 
     @property
     def codex_turn_sandbox_policy(self) -> str:
-        return (self._codex().get("turn_sandbox_policy") or "relaxed").strip()
+        # Codex turn sandbox policy type (use same variants as thread_sandbox if supported)
+        return (self._codex().get("turn_sandbox_policy") or "workspace-write").strip()
 
     @property
     def codex_turn_timeout_ms(self) -> int:
@@ -233,8 +245,8 @@ def validate_dispatch_config(config: ServiceConfig) -> list[str]:
         errors.append(f"unsupported tracker.kind: {config.tracker_kind}")
     if not config.tracker_api_key:
         errors.append("tracker.api_key is required (set LINEAR_API_KEY or configure in workflow)")
-    if config.tracker_kind == "linear" and not config.tracker_project_slug:
-        errors.append("tracker.project_slug is required when tracker.kind is linear")
+    if config.tracker_kind == "linear" and not config.tracker_project_slug and not config.tracker_project_id:
+        errors.append("tracker.project_slug or tracker.project_id is required when tracker.kind is linear")
     if not config.codex_command:
         errors.append("codex.command is required")
     return errors

@@ -20,28 +20,35 @@ source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
+**Codex CLI:** Symphony runs `codex app-server` per issue. Install the Codex app-server CLI and ensure it is on your PATH (or set `codex.command` in `WORKFLOW.md` to the full path, e.g. `/usr/local/bin/codex app-server`). Verify with:
+```bash
+bash -lc "codex app-server"
+```
+(No "command not found" and the process should stay running.)
+
 Set your Linear API key and project:
 
 ```bash
 export LINEAR_API_KEY=lin_api_...
+export LINEAR_PROJECT_SLUG=your-project-slug   # from project URL, e.g. alpha-kite-f0ebf2d85f93
 ```
 
-Edit `WORKFLOW.md` and set `tracker.project_slug` to your Linear project’s slug ID (from the project URL or API).
+Or set `tracker.project_slug` in `WORKFLOW.md`; `$LINEAR_PROJECT_SLUG` is expanded from the environment.
 
 ## Run
 
 ```bash
+# Recommended: use the run script (checks env, starts with dashboard on :8080)
+./scripts/run-symphony.sh
+
+# Or manually (use python3 if python is not available):
+python3 -m symphony.cli -v --port 8080
+
 # Default: use ./WORKFLOW.md
-python -m symphony.cli
+python3 -m symphony.cli
 
 # Explicit workflow path
-python -m symphony.cli /path/to/WORKFLOW.md
-
-# With optional dashboard on port 8080
-python -m symphony.cli --port 8080
-
-# Verbose logs
-python -m symphony.cli -v
+python3 -m symphony.cli /path/to/WORKFLOW.md
 ```
 
 The service will:
