@@ -372,7 +372,16 @@ def run_agent_attempt(
             if method == "turn/completed":
                 turn_done = True
                 turn_success = True
-                _emit(on_event, "turn_completed", {"usage": _extract_usage(obj), "turn_count": turn_number})
+                usage = _extract_usage(obj)
+                logger.info(
+                    "codex turn %s: turn_completed usage_from_codex=%s (keys in message: %s)",
+                    turn_number,
+                    usage,
+                    list(obj.keys()),
+                )
+                if not usage and isinstance(obj.get("params"), dict):
+                    logger.debug("codex turn/completed params=%s", list(obj["params"].keys()))
+                _emit(on_event, "turn_completed", {"usage": usage, "turn_count": turn_number})
             elif method in ("turn/failed", "turn/cancelled"):
                 turn_done = True
                 _emit(on_event, "turn_failed" if method == "turn/failed" else "turn_cancelled", {"payload": obj})
