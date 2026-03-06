@@ -388,7 +388,12 @@ def run_agent_attempt(
                     list(obj.keys()),
                 )
                 if not usage and isinstance(obj.get("params"), dict):
-                    logger.debug("codex turn/completed params=%s", list(obj["params"].keys()))
+                    params_dbg = obj["params"]
+                    logger.debug(
+                        "codex turn/completed params keys=%s turn_payload=%s",
+                        list(params_dbg.keys()),
+                        json.dumps(params_dbg.get("turn", {}))[:2000],
+                    )
                 _emit(on_event, "turn_completed", {"usage": usage, "turn_count": turn_number})
             elif method in ("turn/failed", "turn/cancelled"):
                 turn_done = True

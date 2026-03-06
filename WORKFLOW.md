@@ -29,8 +29,8 @@ agent:
   max_retry_backoff_ms: 300000
 
 codex:
-  # Use full path if codex is not on PATH for bash -lc (e.g. /usr/local/bin/codex app-server or npx codex app-server)
-  command: codex app-server
+  # Local in-repo Codex-compatible app-server (no external codex binary required)
+  command: python -m symphony.local_codex_server
   # approval_policy: never = auto-approve (Codex: untrusted | on-failure | on-request | reject | never)
   # thread_sandbox: workspace-write (Codex thread/start: read-only | workspace-write | danger-full-access)
   # turn_sandbox_policy: workspaceWrite (Codex turn sandboxPolicy.type: camelCase workspaceWrite | readOnly | dangerFullAccess | externalSandbox)
