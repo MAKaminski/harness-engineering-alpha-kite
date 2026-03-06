@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 
 from .workflow_loader import load_workflow, WorkflowLoadError
@@ -74,7 +75,6 @@ def main() -> int:
 
     try:
         while True:
-            import time
             time.sleep(60)
     except KeyboardInterrupt:
         pass

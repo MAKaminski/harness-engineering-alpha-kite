@@ -16,7 +16,7 @@ from .linear_client import (
     fetch_issues_by_states,
 )
 from .models import Issue, OrchestratorState, RetryEntry, RunningEntry
-from .workspace_manager import create_for_issue, remove_workspace
+from .workspace_manager import create_for_issue, get_workspace_path, remove_workspace
 
 logger = logging.getLogger("symphony.orchestrator")
 
@@ -130,7 +130,6 @@ class Orchestrator:
         try:
             path = self._get_workflow_path()
             wf = self._load_workflow(path)
-            from .config import ServiceConfig
             cfg = ServiceConfig(wf)
             return cfg, wf.prompt_template
         except Exception as e:
@@ -204,10 +203,7 @@ class Orchestrator:
             entry = state.running.pop(issue_id)
             state.claimed.discard(issue_id)
             identifier = entry.identifier
-            workspace_path = None
-            if config:
-                from .workspace_manager import get_workspace_path
-                workspace_path = get_workspace_path(config.workspace_root, identifier)
+            workspace_path = get_workspace_path(config.workspace_root, identifier) if config else None
         logger.info("issue_id=%s issue_identifier=%s terminated reason=%s", issue_id, identifier, reason)
         if cleanup_workspace and config and workspace_path:
             try:
@@ -489,7 +485,6 @@ class Orchestrator:
         try:
             terminal_issues = fetch_issues_by_states(config, config.tracker_terminal_states)
             for issue in terminal_issues:
-                from .workspace_manager import get_workspace_path
                 path = get_workspace_path(config.workspace_root, issue.identifier)
                 try:
                     remove_workspace(config, path, log_fn=logger.warning)

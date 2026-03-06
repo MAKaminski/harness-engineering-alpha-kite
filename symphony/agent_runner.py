@@ -12,6 +12,8 @@ from typing import Any, Callable
 
 from .config import ServiceConfig
 from .models import Issue
+from .prompt import render_prompt
+from .workspace_manager import run_after_run, run_before_run
 
 
 # Max line size for protocol (spec recommends 10 MB)
@@ -96,9 +98,6 @@ def run_agent_attempt(
     Returns (success, error_message). On failure, error_message is set.
     High-trust: auto-approve; user input required -> fail immediately.
     """
-    from .prompt import render_prompt
-    from .workspace_manager import run_after_run, run_before_run
-
     # Validate cwd == workspace_path (Section 9.5)
     workspace_path_abs = os.path.abspath(workspace_path)
     root_abs = os.path.abspath(config.workspace_root)
