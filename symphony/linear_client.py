@@ -27,10 +27,16 @@ def _gql(endpoint: str, api_key: str, query: str, variables: dict[str, Any] | No
     payload: dict[str, Any] = {"query": query}
     if variables:
         payload["variables"] = variables
+    # Linear API keys (lin_api_...) must be sent as-is; do not use "Bearer " prefix (API returns 400).
+    auth_header = (api_key or "").strip()
+    if auth_header and not auth_header.lower().startswith("bearer ") and not auth_header.startswith("lin_api_"):
+        auth_header = f"Bearer {auth_header}"
+    elif auth_header and auth_header.startswith("lin_api_"):
+        pass  # use as-is
     resp = requests.post(
         endpoint,
         headers={
-            "Authorization": f"Bearer {api_key}" if api_key and not api_key.strip().startswith("Bearer ") else (api_key or ""),
+            "Authorization": auth_header,
             "Content-Type": "application/json",
         },
         json=payload,
@@ -66,8 +72,10 @@ def _normalize_issue(node: dict[str, Any]) -> Issue:
     labels = [str(l.get("name", "")).strip().lower() for l in labels_raw if l and l.get("name")]
 
     # Blocked by: inverse relation "blocks" (issues that block this one)
+    # API returns "relations" (relatedIssues was deprecated/removed)
     blocked_by: list[BlockerRef] = []
-    for rel in node.get("relatedIssues", {}).get("nodes", []) or []:
+    relations_data = node.get("relations") or node.get("relatedIssues") or {}
+    for rel in relations_data.get("nodes", []) or []:
         if not isinstance(rel, dict):
             continue
         link = rel.get("relatedIssue") or rel
@@ -109,7 +117,37 @@ def _normalize_issue(node: dict[str, Any]) -> Issue:
     )
 
 
-# GraphQL: candidate issues (active states, project slug, paginated)
+# GraphQL: candidate issues by project ID (active states, paginated)
+CANDIDATES_BY_ID_QUERY = """
+query CandidateIssuesById($projectId: ID!, $stateNames: [String!], $first: Int!, $after: String) {
+  issues(
+    first: $first
+    after: $after
+    filter: {
+      project: { id: { eq: $projectId } }
+      state: { name: { in: $stateNames } }
+    }
+  ) {
+    nodes {
+      id
+      identifier
+      title
+      description
+      priority
+      state { name }
+      branchName
+      url
+      createdAt
+      updatedAt
+      labels { nodes { name } }
+      relations(first: 50) { nodes { type relatedIssue { id identifier state { name } } } }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+"""
+
+# GraphQL: candidate issues by project slug (active states, paginated)
 CANDIDATES_QUERY = """
 query CandidateIssues($projectSlug: String!, $stateNames: [String!], $first: Int!, $after: String) {
   issues(
@@ -132,7 +170,7 @@ query CandidateIssues($projectSlug: String!, $stateNames: [String!], $first: Int
       createdAt
       updatedAt
       labels { nodes { name } }
-      relatedIssues(first: 50) { nodes { type relatedIssue { id identifier state { name } } } }
+      relations(first: 50) { nodes { type relatedIssue { id identifier state { name } } } }
     }
     pageInfo { hasNextPage endCursor }
   }
@@ -165,21 +203,26 @@ def fetch_candidate_issues(config: ServiceConfig) -> list[Issue]:
     """Return issues in active states for the configured project (paginated)."""
     if not config.tracker_api_key:
         raise LinearClientError("missing_tracker_api_key", "Linear API key not set")
-    if not config.tracker_project_slug:
-        raise LinearClientError("missing_tracker_project_slug", "Project slug not set")
+    use_id = bool(config.tracker_project_id)
+    if not use_id and not config.tracker_project_slug:
+        raise LinearClientError("missing_tracker_project_slug", "Project slug or project_id not set")
     endpoint = config.tracker_endpoint or LINEAR_GRAPHQL_ENDPOINT
     state_names = config.tracker_active_states or ["Todo", "In Progress"]
     all_nodes: list[dict] = []
     after: str | None = None
+    query = CANDIDATES_BY_ID_QUERY if use_id else CANDIDATES_QUERY
     while True:
         variables: dict[str, Any] = {
-            "projectSlug": config.tracker_project_slug,
             "stateNames": state_names,
             "first": PAGE_SIZE,
         }
+        if use_id:
+            variables["projectId"] = config.tracker_project_id
+        else:
+            variables["projectSlug"] = config.tracker_project_slug
         if after:
             variables["after"] = after
-        data = _gql(endpoint, config.tracker_api_key, CANDIDATES_QUERY, variables)
+        data = _gql(endpoint, config.tracker_api_key, query, variables)
         nodes, has_next, end_cursor = _extract_candidate_nodes(data)
         for n in nodes:
             if isinstance(n.get("state"), dict):
@@ -193,7 +236,24 @@ def fetch_candidate_issues(config: ServiceConfig) -> list[Issue]:
     return [_normalize_issue(n) for n in all_nodes]
 
 
-# Terminal issues for startup cleanup (by state names; optional project filter)
+# Terminal issues for startup cleanup (by project ID)
+TERMINAL_ISSUES_BY_ID_QUERY = """
+query TerminalIssuesById($stateNames: [String!], $projectId: ID!, $first: Int!, $after: String) {
+  issues(
+    first: $first
+    after: $after
+    filter: {
+      state: { name: { in: $stateNames } }
+      project: { id: { eq: $projectId } }
+    }
+  ) {
+    nodes { id identifier state { name } }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+"""
+
+# Terminal issues for startup cleanup (by project slug)
 TERMINAL_ISSUES_QUERY = """
 query TerminalIssues($stateNames: [String!], $projectSlug: String, $first: Int!, $after: String) {
   issues(
@@ -218,14 +278,19 @@ def fetch_issues_by_states(config: ServiceConfig, state_names: list[str]) -> lis
     if not config.tracker_api_key:
         raise LinearClientError("missing_tracker_api_key", "Linear API key not set")
     endpoint = config.tracker_endpoint or LINEAR_GRAPHQL_ENDPOINT
-    project_slug = config.tracker_project_slug or ""
+    use_id = bool(config.tracker_project_id)
+    query = TERMINAL_ISSUES_BY_ID_QUERY if use_id else TERMINAL_ISSUES_QUERY
     all_nodes: list[dict] = []
     after: str | None = None
     while True:
-        variables: dict[str, Any] = {"stateNames": state_names, "projectSlug": project_slug, "first": PAGE_SIZE}
+        variables: dict[str, Any] = {"stateNames": state_names, "first": PAGE_SIZE}
+        if use_id:
+            variables["projectId"] = config.tracker_project_id
+        else:
+            variables["projectSlug"] = config.tracker_project_slug or ""
         if after:
             variables["after"] = after
-        data = _gql(endpoint, config.tracker_api_key, TERMINAL_ISSUES_QUERY, variables)
+        data = _gql(endpoint, config.tracker_api_key, query, variables)
         issues_data = (data.get("data") or {}).get("issues")
         if not issues_data:
             break
@@ -259,7 +324,7 @@ query IssueStatesByIds($issueIds: [ID!]!) {
       createdAt
       updatedAt
       labels { nodes { name } }
-      relatedIssues(first: 50) { nodes { type relatedIssue { id identifier state { name } } } }
+      relations(first: 50) { nodes { type relatedIssue { id identifier state { name } } } }
     }
   }
 }

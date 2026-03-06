@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 # Run Symphony to resolve open Linear issues (polls Linear, dispatches Codex agents per issue).
 # Requires: LINEAR_API_KEY, LINEAR_PROJECT_SLUG (or set project_slug in WORKFLOW.md).
+# Loads .env and .env.local if present (both are gitignored — never commit secrets).
 set -e
 cd "$(dirname "$0")/.."
+
+# Load env from gitignored files (optional)
+for f in .env .env.local; do
+  if [ -f "$f" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$f"
+    set +a
+  fi
+done
 
 if [ -z "$LINEAR_API_KEY" ]; then
   echo "Error: LINEAR_API_KEY is not set." >&2
@@ -11,11 +22,11 @@ if [ -z "$LINEAR_API_KEY" ]; then
   exit 1
 fi
 
-if [ -z "$LINEAR_PROJECT_SLUG" ]; then
-  echo "Warning: LINEAR_PROJECT_SLUG is not set. Symphony will fail validation unless project_slug is set in WORKFLOW.md." >&2
-  echo "For Alpha-Kite project use the slug from the project URL, e.g.:" >&2
+if [ -z "$LINEAR_PROJECT_ID" ] && [ -z "$LINEAR_PROJECT_SLUG" ]; then
+  echo "Warning: Neither LINEAR_PROJECT_ID nor LINEAR_PROJECT_SLUG is set. Symphony will fail validation." >&2
+  echo "Set one of them, e.g.:" >&2
+  echo "  export LINEAR_PROJECT_ID=d77c9342-536d-41f4-9526-2fd38e65226c" >&2
   echo "  export LINEAR_PROJECT_SLUG=alpha-kite-f0ebf2d85f93" >&2
-  echo "Or set tracker.project_slug in WORKFLOW.md to your Linear project slugId." >&2
 fi
 
 PYTHON=${PYTHON:-python3}
