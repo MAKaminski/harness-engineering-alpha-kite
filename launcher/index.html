@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alpha-Kite Launcher</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --border: #2d3a4f;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --success: #3fb950;
+      --danger: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+      color: var(--text);
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+      max-width: 32rem;
+    }
+    section h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin: 0 0 1rem 0;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    button {
+      font-size: 0.9rem;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    button:hover {
+      background: var(--border);
+      border-color: var(--accent);
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--bg);
+    }
+    button.primary:hover {
+      filter: brightness(1.1);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 0.6rem 1rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .toast.show { opacity: 1; }
+    .toast.success { border-color: var(--success); }
+    .toast.error { border-color: var(--danger); }
+    .status {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+    }
+    .status span { margin-right: 1rem; }
+    .status .on { color: var(--success); }
+    .status .off { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Alpha-Kite Launcher</h1>
+  <p class="subtitle">Start services and open endpoints in your browser.</p>
+
+  <section>
+    <h2>Start processes</h2>
+    <div class="row">
+      <button class="primary" data-action="start" data-target="api">Start API</button>
+      <button class="primary" data-action="start" data-target="web">Start Web</button>
+      <button class="primary" data-action="start" data-target="symphony">Start Symphony</button>
+    </div>
+    <p class="status" id="status">API: — Web: — Symphony: —</p>
+  </section>
+
+  <section>
+    <h2>Open in browser</h2>
+    <div class="row">
+      <button data-action="open" data-url="http://localhost:8000/health">Health</button>
+      <button data-action="open" data-url="http://localhost:8000/market/quote?symbol=AAPL">Market Quote</button>
+      <button data-action="open" data-url="http://localhost:3000">Web App</button>
+    </div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const toast = document.getElementById('toast');
+    const statusEl = document.getElementById('status');
+
+    function showToast(msg, success = true) {
+      toast.textContent = msg;
+      toast.className = 'toast show ' + (success ? 'success' : 'error');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    async function refreshStatus() {
+      try {
+        const r = await fetch('/status');
+        const s = await r.json();
+        statusEl.innerHTML = [
+          'API: <span class="' + (s.api ? 'on' : 'off') + '">' + (s.api ? 'Running' : 'Stopped') + '</span>',
+          'Web: <span class="' + (s.web ? 'on' : 'off') + '">' + (s.web ? 'Running' : 'Stopped') + '</span>',
+          'Symphony: <span class="' + (s.symphony ? 'on' : 'off') + '">' + (s.symphony ? 'Running' : 'Stopped') + '</span>'
+        ].join(' ');
+      } catch (_) {
+        statusEl.textContent = 'Status unavailable';
+      }
+    }
+
+    document.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const action = btn.dataset.action;
+        if (action === 'open') {
+          window.open(btn.dataset.url, '_blank');
+          showToast('Opened in new tab');
+          return;
+        }
+        if (action === 'start') {
+          const target = btn.dataset.target;
+          btn.disabled = true;
+          try {
+            const r = await fetch('/start/' + target, { method: 'POST' });
+            const data = await r.json();
+            showToast(data.message || (data.ok ? 'Started' : 'Failed'), data.ok);
+            refreshStatus();
+          } catch (e) {
+            showToast('Request failed', false);
+          }
+          btn.disabled = false;
+        }
+      });
+    });
+
+    refreshStatus();
+    setInterval(refreshStatus, 3000);
+  </script>
+</body>
+</html>

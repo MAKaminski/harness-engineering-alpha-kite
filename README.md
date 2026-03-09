@@ -7,6 +7,7 @@ This repository now contains two connected systems:
 
 ## Layout
 
+- `launcher/`: simple UI to start API, Web, Symphony and open Health / Market / Web App (port 5050)
 - `symphony/`: core Symphony service implementation
 - `apps/api`: FastAPI backend (Supabase, Polygon, Schwab, Camelot providers)
 - `apps/web`: Next.js frontend routed to backend APIs
@@ -33,6 +34,13 @@ Core values:
 - `LINEAR_PROJECT_ID=d77c9342-536d-41f4-9526-2fd38e65226c` (preferred)
 - `PROVIDER_MODE=auto|mock|real`
 - Provider credentials (`SUPABASE_*`, `POLYGON_*`, `SCHWAB_*`, `CAMELOT_*`)
+
+## Launcher UI (start everything from one page)
+
+```bash
+./scripts/run-launcher.sh
+# Open http://localhost:5050 — start API, Web, Symphony and open Health / Market Quote / Web App in browser
+```
 
 ## Run Symphony
 
