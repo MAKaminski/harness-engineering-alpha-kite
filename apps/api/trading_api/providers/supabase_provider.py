@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
+from typing import Optional
+
 import requests
 
 from trading_api.config import Settings
@@ -11,7 +13,7 @@ from trading_api.providers.base import ProviderMetadata
 from trading_api.schemas import SessionResponse
 
 
-def _token_for(user_id: str, email: str | None) -> str:
+def _token_for(user_id: str, email: Optional[str]) -> str:
     payload = f"{user_id}:{email or ''}:{datetime.now(timezone.utc).isoformat()}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:40]
 
@@ -41,13 +43,13 @@ class MockSupabaseProvider:
         _STORE.watchlists.setdefault(user_id, set()).discard(normalized)
         return self.list_watchlist(user_id)
 
-    def create_session(self, user_id: str, email: str | None) -> SessionResponse:
+    def create_session(self, user_id: str, email: Optional[str]) -> SessionResponse:
         token = _token_for(user_id, email)
         session = SessionResponse(token=token, user_id=user_id, email=email, provider_mode="mock")
         _STORE.sessions[token] = session
         return session
 
-    def get_session(self, token: str) -> SessionResponse | None:
+    def get_session(self, token: str) -> Optional[SessionResponse]:
         return _STORE.sessions.get(token)
 
 
@@ -101,7 +103,7 @@ class RealSupabaseProvider:
         response.raise_for_status()
         return self.list_watchlist(user_id)
 
-    def create_session(self, user_id: str, email: str | None) -> SessionResponse:
+    def create_session(self, user_id: str, email: Optional[str]) -> SessionResponse:
         token = _token_for(user_id, email)
         payload = {
             "token": token,
@@ -113,7 +115,7 @@ class RealSupabaseProvider:
         response.raise_for_status()
         return SessionResponse(token=token, user_id=user_id, email=email, provider_mode="real")
 
-    def get_session(self, token: str) -> SessionResponse | None:
+    def get_session(self, token: str) -> Optional[SessionResponse]:
         response = requests.get(
             f"{self.url}/rest/v1/sessions",
             params={"token": f"eq.{token}", "limit": "1", "select": "token,user_id,email"},

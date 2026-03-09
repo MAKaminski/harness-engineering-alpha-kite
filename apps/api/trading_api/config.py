@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from typing import Optional
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -30,17 +31,17 @@ class Settings:
     provider_mode: str
     enable_order_placement: bool
 
-    supabase_url: str | None
-    supabase_service_role_key: str | None
+    supabase_url: Optional[str]
+    supabase_service_role_key: Optional[str]
 
-    polygon_api_key: str | None
+    polygon_api_key: Optional[str]
     polygon_base_url: str
 
     schwab_base_url: str
-    schwab_access_token: str | None
-    schwab_account_id: str | None
+    schwab_access_token: Optional[str]
+    schwab_account_id: Optional[str]
 
-    camelot_repo_path: str | None
+    camelot_repo_path: Optional[str]
     camelot_source_file: str
     camelot_ingest_output: str
 

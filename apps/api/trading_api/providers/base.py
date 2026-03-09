@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Optional, Protocol
 
 from trading_api.schemas import Bar, Order, OrderCreate, Position, SessionResponse
 
@@ -32,9 +32,9 @@ class SupabaseProvider(Protocol):
 
     def remove_watchlist_symbol(self, user_id: str, symbol: str) -> list[str]: ...
 
-    def create_session(self, user_id: str, email: str | None) -> SessionResponse: ...
+    def create_session(self, user_id: str, email: Optional[str]) -> SessionResponse: ...
 
-    def get_session(self, token: str) -> SessionResponse | None: ...
+    def get_session(self, token: str) -> Optional[SessionResponse]: ...
 
 
 class SchwabProvider(Protocol):

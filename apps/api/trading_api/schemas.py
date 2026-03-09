@@ -1,6 +1,8 @@
 """Pydantic schemas used by API endpoints and provider adapters."""
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -81,13 +83,13 @@ class OrdersResponse(BaseModel):
 
 class SessionCreate(BaseModel):
     user_id: str = Field(min_length=1)
-    email: str | None = None
+    email: Optional[str] = None
 
 
 class SessionResponse(BaseModel):
     token: str
     user_id: str
-    email: str | None = None
+    email: Optional[str] = None
     provider_mode: str
 
 
