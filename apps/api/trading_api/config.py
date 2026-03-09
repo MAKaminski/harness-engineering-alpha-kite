@@ -55,6 +55,11 @@ class Settings:
 
 
 def load_settings() -> Settings:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
     return Settings(
         app_env=os.getenv("APP_ENV", "development"),
         api_host=os.getenv("API_HOST", "0.0.0.0"),
