@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import random
 import requests
 
-from trading_api.config import Settings
+from apps.api.trading_api.config import Settings
 from .base import ProviderMetadata
 from ..schemas import Bar
 

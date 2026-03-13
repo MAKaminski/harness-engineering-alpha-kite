@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from trading_api.config import Settings, load_settings
+from apps.api.trading_api.config import Settings, load_settings
 from .providers.camelot_provider import build_camelot_provider
 from .providers.polygon_provider import build_polygon_provider
 from .providers.schwab_provider import build_schwab_provider

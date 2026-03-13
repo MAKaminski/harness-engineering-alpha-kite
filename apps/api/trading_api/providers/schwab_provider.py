@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 import uuid
 import requests
 
-from trading_api.config import Settings
+from apps.api.trading_api.config import Settings
 from .base import ProviderMetadata
-from ..trading_api.schemas import Order, OrderCreate, Position
+from ..schemas import Order, OrderCreate, Position
 
 
 class MockSchwabProvider:

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
-from trading_api.config import Settings
+from apps.api.trading_api.config import Settings
 from .base import ProviderMetadata
 
 
