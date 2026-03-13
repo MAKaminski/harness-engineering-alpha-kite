@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from fastapi import Depends, FastAPI, HTTPException
 
-from trading_api.dependencies import (
+from .dependencies import (
     get_camelot_provider,
     get_polygon_provider,
     get_schwab_provider,
     get_supabase_provider,
 )
-from trading_api.schemas import (
+from .schemas import (
     BarsResponse,
     CamelotIngestResponse,
     IndicatorResponse,

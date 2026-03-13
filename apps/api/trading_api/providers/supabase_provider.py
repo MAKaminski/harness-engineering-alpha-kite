@@ -9,8 +9,8 @@ from typing import Optional
 import requests
 
 from trading_api.config import Settings
-from trading_api.providers.base import ProviderMetadata
-from trading_api.schemas import SessionResponse
+from .base import ProviderMetadata
+from ..trading_api.schemas import SessionResponse
 
 
 def _token_for(user_id: str, email: Optional[str]) -> str:

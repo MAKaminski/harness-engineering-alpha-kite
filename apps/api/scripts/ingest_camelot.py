@@ -1,7 +1,7 @@
 """Manual Camelot ingestion job for scheduled or ad-hoc execution."""
 from __future__ import annotations
 
-from trading_api.dependencies import get_camelot_provider
+from apps.api.trading_api.dependencies import get_camelot_provider
 
 
 def main() -> int:

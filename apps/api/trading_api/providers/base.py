@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
-from trading_api.schemas import Bar, Order, OrderCreate, Position, SessionResponse
+from ..schemas import Bar, Order, OrderCreate, Position, SessionResponse
 
 
 @dataclass(frozen=True)

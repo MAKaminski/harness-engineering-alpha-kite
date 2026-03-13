@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from trading_api.config import Settings
-from trading_api.providers.base import ProviderMetadata
+from .base import ProviderMetadata
 
 
 class MockCamelotProvider:

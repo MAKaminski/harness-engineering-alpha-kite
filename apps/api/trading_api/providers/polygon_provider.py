@@ -6,8 +6,8 @@ import random
 import requests
 
 from trading_api.config import Settings
-from trading_api.providers.base import ProviderMetadata
-from trading_api.schemas import Bar
+from .base import ProviderMetadata
+from ..schemas import Bar
 
 
 class MockPolygonProvider:
